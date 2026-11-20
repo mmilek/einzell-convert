@@ -1,17 +1,3 @@
-"""
-Core conversion logic for einzell-convert.
-
-Adapted from einzell-web/census_api.py's compute_dataset_output(), which
-drives the sampling and per-cell parameter derivation for Einzell's own
-CZ CELLxGENE Census pipeline. This module generalizes that logic to any
-plain (x, y, cell_type) input instead of a live Census query: the
-proportional 1024-cell sampling, local/global density, and
-distance-to-peak math are copied faithfully. Pseudotime is the one
-approximation -- the original pipeline builds its neighbor graph on a
-50-dim scVI embedding derived from raw expression data, which a plain CSV
-doesn't have; here the neighbor graph (and diffusion pseudotime) is built
-directly on the provided 2D (x, y) embedding instead.
-"""
 from __future__ import annotations
 
 import numpy as np
@@ -54,8 +40,7 @@ def validate_input(df: pd.DataFrame) -> None:
 def sample_cells(df: pd.DataFrame, max_cells: int = MAX_CELLS, max_cell_types: int = MAX_CELL_TYPES,
                   random_state: int = 42) -> pd.DataFrame:
     """
-    Proportional multinomial sample down to `max_cells` rows, mirroring
-    census_api.py's compute_dataset_output() exactly: keep only the
+    Proportional multinomial sample down to `max_cells` rows: keep only the
     `max_cell_types` most frequent cell types, compute their proportions,
     allocate `max_cells` slots across them via a multinomial draw, then
     randomly sample that many rows from within each type.
@@ -80,7 +65,6 @@ def sample_cells(df: pd.DataFrame, max_cells: int = MAX_CELLS, max_cell_types: i
 
 
 def compute_local_density(xy: np.ndarray, n_neighbors: int = 15) -> np.ndarray:
-    """Mirrors census_api.py's (now zero-guarded) local_density computation."""
     k = min(n_neighbors, len(xy) - 1)
     nbrs = NearestNeighbors(n_neighbors=k).fit(xy)
     distances, _ = nbrs.kneighbors()
@@ -88,13 +72,12 @@ def compute_local_density(xy: np.ndarray, n_neighbors: int = 15) -> np.ndarray:
 
 
 def compute_global_density(xy: np.ndarray, bw_method: float = 0.1) -> np.ndarray:
-    """Mirrors census_api.py's global_density (gaussian KDE over the embedding)."""
     kde = gaussian_kde(xy.T, bw_method=bw_method)
     return kde(xy.T)
 
 
 def compute_dist_to_peak(xy: np.ndarray, cell_types: np.ndarray, local_density: np.ndarray) -> np.ndarray:
-    """Mirrors census_api.py's dist_to_peak: for each cell type, find the
+    """For each cell type, find the
     cell with the highest local density ("the peak") and measure every
     same-type cell's distance to it."""
     peak_dist = np.zeros(len(xy))
@@ -108,13 +91,6 @@ def compute_dist_to_peak(xy: np.ndarray, cell_types: np.ndarray, local_density: 
 
 
 def compute_pseudotime(xy: np.ndarray) -> np.ndarray:
-    """
-    Approximates census_api.py's diffusion pseudotime (sc.tl.diffmap +
-    sc.tl.dpt), but computed on the 2D embedding directly rather than a
-    50-dim scVI embedding -- a plain CSV has no raw expression data to
-    re-embed. Uses scanpy's own diffmap/dpt implementation (not a hand-rolled
-    approximation) for fidelity to the original method.
-    """
     import anndata
     import scanpy as sc
 
@@ -127,12 +103,9 @@ def compute_pseudotime(xy: np.ndarray) -> np.ndarray:
 
     # Cells in a different connected component than the root (common when
     # (x, y) clusters are tightly separated, e.g. synthetic/toy data, or a
-    # cell type with no neighbors near the root) get NaN from dpt -- caught
-    # directly via a smoke test against well-separated synthetic clusters.
+    # cell type with no neighbors near the root) get NaN from dpt. 
     # Treat them as "maximally distant from the root" rather than letting
-    # NaN slip into the output JSON (the same class of bug just fixed in
-    # einzell-web/census_api.py's local_density -- fail-safe here instead of
-    # discovering it downstream as an `Infinity`/`NaN` JSON error).
+    # NaN slip into the output JSON.
     finite = pseudotime[np.isfinite(pseudotime)]
     fallback = finite.max() if finite.size else 1.0
     pseudotime = np.where(np.isfinite(pseudotime), pseudotime, fallback)
@@ -142,8 +115,7 @@ def compute_pseudotime(xy: np.ndarray) -> np.ndarray:
 def compute_dataset_output(df: pd.DataFrame, max_cells: int = MAX_CELLS) -> dict:
     """
     Full pipeline: validate -> proportional sample -> derive any missing
-    optional columns -> emit Einzell's dataset JSON schema (confirmed
-    against einzell-web/rnbo-test/dataset_tb.test.json): a dict keyed by a
+    optional columns -> output Einzell's dataset JSON schema: a dict keyed by a
     fresh 0-based sequential string index, each value
     [cell_type, x, y, pseudotime, local_density, global_density, dist_to_peak].
     """
