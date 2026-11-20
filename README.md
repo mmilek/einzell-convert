@@ -1,6 +1,6 @@
-# einzell-convert
+# Convert your scRNAseq data for Einzell
 
-Converts single-cell data into the JSON format Einzell, single cell synthesizer needs to play a dataset.
+Converts single-cell RNAseq datasets into the JSON format needed by Einzell - single cell synthesizer.
 
 ## Required input: a CSV with `x-coordinate`, `y-coordinate`, `cell_type`
 
