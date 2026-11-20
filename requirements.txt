@@ -1,0 +1,11 @@
+pandas
+numpy
+scipy
+scikit-learn
+
+# Only used for compute_pseudotime()'s diffusion-pseudotime algorithm
+# (sc.tl.diffmap / sc.tl.dpt) -- not used for reading .h5ad/.rds files,
+# which this tool deliberately doesn't support. Kept to stay faithful to
+# the same pseudotime method einzell-web's census_api.py uses.
+anndata
+scanpy
